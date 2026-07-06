@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arweave TX Inspector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a24;
+      --border: #252b3b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --accent: #3b82f6;
+      --accent-dim: #1d4ed8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --purple: #a855f7;
+      --cyan: #06b6d4;
+      --radius: 10px;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 32px 16px 64px;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    header { margin-bottom: 40px; }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+
+    /* Input */
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: flex-start;
+    }
+
+    textarea {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 12px 16px;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.6;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+
+    button {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 12px 24px;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    button:hover { background: var(--accent-dim); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .input-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* Dots */
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+
+    .dot-green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-red    { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+    .dot-yellow { background: var(--yellow);box-shadow: 0 0 6px var(--yellow); }
+    .dot-spin   { background: var(--muted); animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .status-ok     { color: var(--green); }
+    .status-fail   { color: var(--red); }
+    .status-warn   { color: var(--yellow); }
+    .status-idle   { color: var(--muted); }
+
+    /* Bundle level badge */
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .level-L1 { background: rgba(6,182,212,0.12); color: var(--cyan); border: 1px solid rgba(6,182,212,0.3); }
+    .level-L2 { background: rgba(168,85,247,0.12); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+    .level-L3 { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .level-unknown { background: rgba(100,116,139,0.12); color: var(--muted); border: 1px solid var(--border); }
+
+    .find-block-btn {
+      font-size: 0.6rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(59,130,246,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(59,130,246,0.3);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .find-block-btn:hover:not(:disabled) { background: rgba(59,130,246,0.25); }
+    .find-block-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .partition-badge {
+      display: block;
+      font-size: 0.63rem;
+      color: var(--muted);
+      margin-top: 4px;
+      font-family: var(--mono);
+      letter-spacing: 0.03em;
+    }
+
+    .partition-badge.partition-warn {
+      color: var(--red);
+      cursor: help;
+    }
+
+    /* HTTP status chip */
+    .http-chip {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .http-2xx { background: rgba(34,197,94,0.15);  color: var(--green); }
+    .http-3xx { background: rgba(6,182,212,0.15);  color: var(--cyan); }
+    .http-4xx { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .http-err { background: rgba(100,116,139,0.15); color: var(--muted); }
+
+    /* Stats grid */
+    .stats-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stat-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 100px;
+      text-align: center;
+      flex: 1;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+
+    .stat-sub {
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .level-dist {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .level-dist-label {
+      font-size: 0.73rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Table */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 680px;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    thead th.col-gw { text-align: center; }
+
+    tbody tr { border-bottom: 1px solid rgba(37,43,59,0.6); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+    /* Sub-rows (manifest index.html entries) */
+    tbody tr.sub-row { background: rgba(59,130,246,0.03); }
+    tbody tr.sub-row:hover { background: rgba(59,130,246,0.06); }
+    tbody tr.sub-row td { border-top: none; }
+    .sub-row-arrow { color: var(--muted); margin-right: 4px; font-size: 0.75rem; }
+
+    tbody td {
+      padding: 10px 12px;
+      vertical-align: middle;
+    }
+
+    .col-txid {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .col-txid a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .col-txid a:hover { text-decoration: underline; }
+
+    .tx-ingested {
+      display: block;
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .col-layer { white-space: nowrap; }
+
+    .col-gw {
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .gw-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      justify-content: center;
+    }
+
+    .col-diagnosis {
+      min-width: 150px;
+      font-size: 0.8rem;
+    }
+
+    /* Hidden */
+    .hidden { display: none; }
+
+    /* Rate limit notice */
+    .rate-limit-notice {
+      font-size: 0.72rem;
+      color: var(--yellow);
+      margin-bottom: 20px;
+      display: none;
+    }
+    .rate-limit-notice.visible { display: block; }
+
+    /* Reupload */
+    .reupload-btn {
+      background: var(--purple);
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .reupload-btn:hover { background: #9333ea; }
+
+    .reupload-disabled-wrap {
+      display: inline-block;
+      cursor: help;
+    }
+    .reupload-disabled-wrap .reupload-btn[disabled] {
+      pointer-events: none;
+    }
+
+    .reupload-status {
+      font-size: 0.68rem;
+      margin-top: 4px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+
+    .debug-details {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.66rem;
+    }
+    .debug-details summary {
+      cursor: pointer;
+      color: var(--accent);
+    }
+    .debug-details pre {
+      margin-top: 6px;
+      max-height: 220px;
+      overflow: auto;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+
+    .bulk-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .bulk-status {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.4;
+    }
+
+    .col-actions { min-width: 110px; }
+
+    /* Config */
+    .config-toggle {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 8px;
+      text-decoration: underline dotted;
+    }
+    .config-toggle:hover { color: var(--text); background: none; }
+    .config-panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      gap: 8px;
+      align-items: center;
+    }
+    .config-panel.open { display: flex; }
+    .config-panel label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .config-panel input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 6px 10px;
+      outline: none;
+    }
+    .config-panel input:focus { border-color: var(--accent); }
+
+    /* Footer */
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+  <script type="module" crossorigin src="/assets/index-DGb40a4K.js"></script>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🔍</div>
+      <h1>Arweave TX Inspector</h1>
+    </div>
+    <p class="subtitle">Diagnose why a transaction might be returning 404 on arweave.net</p>
+  </header>
+
+  <div class="input-group">
+    <textarea
+      id="txInput"
+      placeholder="Enter transaction IDs, one per line…"
+      spellcheck="false"
+      autocomplete="off"
+      rows="3"
+    ></textarea>
+    <button id="checkBtn" onclick="runChecks()">Inspect</button>
+  </div>
+  <p class="input-hint">One TX ID per line &mdash; use Ctrl+Enter / ⌘+Enter to run</p>
+  <button class="config-toggle" onclick="document.getElementById('configPanel').classList.toggle('open')">⚙ Config</button>
+  <div id="configPanel" class="config-panel">
+    <label for="uploadUrlInput">Upload endpoint</label>
+    <input id="uploadUrlInput" type="url" value="https://up.arweave.net/tx" spellcheck="false" />
+  </div>
+  <div id="rateLimitNotice" class="rate-limit-notice">⏳ Rate limited (429) — waiting 30 seconds before retrying…</div>
+
+  <div id="results" class="hidden">
+
+    <div class="bulk-actions">
+      <button id="reuploadAllBtn" class="reupload-btn" onclick="reuploadAllAvailable()" disabled>Re-upload all available</button>
+      <button id="downloadAvailableBtn" class="reupload-btn" onclick="downloadSuccessfulAvailable()" disabled>Download available</button>
+      <button id="downloadPendingBtn" class="reupload-btn" onclick="downloadSuccessfulPending()" disabled>Download pending</button>
+      <button id="downloadIncompleteBtn" class="reupload-btn" onclick="downloadIncomplete()" disabled>Download incomplete</button>
+      <span id="reuploadAllStatus" class="bulk-status"></span>
+    </div>
+
+    <!-- Stats -->
+    <div class="card" id="statsCard">
+      <div class="card-title">Summary</div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="level-dist" id="levelDist"></div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card">
+      <div class="card-title">Availability Checks</div>
+      <div class="table-wrapper">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>TXID</th>
+              <th>Layer</th>
+              <th class="col-gw">Raw nodes</th>
+              <th class="col-gw">CDN</th>
+              <th class="col-gw">IRYS</th>
+              <th class="col-gw">AR.IO</th>
+              <th class="col-gw">ArDrive Raw</th>
+              <th class="col-gw">Turbo Gateway</th>
+              <th class="col-gw">Turbo Raw</th>
+              <th class="col-gw">GoldSky</th>
+              <th>Diagnosis</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  Built for the permaweb &mdash;
+  <a href="https://arweave.org" target="_blank" rel="noopener">arweave.org</a>
+</footer>
+
+</body>
+</html>

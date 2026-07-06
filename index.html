@@ -1,0 +1,2775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arweave TX Inspector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a24;
+      --border: #252b3b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --accent: #3b82f6;
+      --accent-dim: #1d4ed8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --purple: #a855f7;
+      --cyan: #06b6d4;
+      --radius: 10px;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 32px 16px 20px;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    header { margin-bottom: 40px; }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+
+    /* Input */
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: flex-start;
+    }
+
+    textarea {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 12px 16px;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.6;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+
+    button {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 12px 24px;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    button:hover { background: var(--accent-dim); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .input-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* Dots */
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+
+    .dot-green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-red    { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+    .dot-yellow { background: var(--yellow);box-shadow: 0 0 6px var(--yellow); }
+    .dot-spin   { background: var(--muted); animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .status-ok     { color: var(--green); }
+    .status-fail   { color: var(--red); }
+    .status-warn   { color: var(--yellow); }
+    .status-idle   { color: var(--muted); }
+
+    /* Bundle level badge */
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .level-L1 { background: rgba(6,182,212,0.12); color: var(--cyan); border: 1px solid rgba(6,182,212,0.3); }
+    .level-L2 { background: rgba(168,85,247,0.12); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+    .level-L3 { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .level-unknown { background: rgba(100,116,139,0.12); color: var(--muted); border: 1px solid var(--border); }
+
+    .find-block-btn {
+      font-size: 0.6rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(59,130,246,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(59,130,246,0.3);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .find-block-btn:hover:not(:disabled) { background: rgba(59,130,246,0.25); }
+    .find-block-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .partition-badge {
+      display: block;
+      font-size: 0.63rem;
+      color: var(--muted);
+      margin-top: 4px;
+      font-family: var(--mono);
+      letter-spacing: 0.03em;
+    }
+
+    .partition-badge.partition-warn {
+      color: var(--red);
+      cursor: help;
+    }
+
+    /* HTTP status chip */
+    .http-chip {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .http-2xx { background: rgba(34,197,94,0.15);  color: var(--green); }
+    .http-3xx { background: rgba(6,182,212,0.15);  color: var(--cyan); }
+    .http-4xx { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .http-err { background: rgba(100,116,139,0.15); color: var(--muted); }
+
+    /* Stats grid */
+    .stats-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stat-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 100px;
+      text-align: center;
+      flex: 1;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+
+    .stat-sub {
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .level-dist {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .level-dist-label {
+      font-size: 0.73rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Table */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 680px;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    thead th.col-gw { text-align: center; }
+
+    tbody tr { border-bottom: 1px solid rgba(37,43,59,0.6); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+    /* Sub-rows (manifest index.html entries) */
+    tbody tr.sub-row { background: rgba(59,130,246,0.03); }
+    tbody tr.sub-row:hover { background: rgba(59,130,246,0.06); }
+    tbody tr.sub-row td { border-top: none; }
+    .sub-row-arrow { color: var(--muted); margin-right: 4px; font-size: 0.75rem; }
+
+    tbody td {
+      padding: 10px 12px;
+      vertical-align: middle;
+    }
+
+    .col-txid {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .col-txid a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .col-txid a:hover { text-decoration: underline; }
+
+    .tx-ingested {
+      display: block;
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .col-layer { white-space: nowrap; }
+
+    .col-gw {
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .gw-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      justify-content: center;
+    }
+
+    .col-diagnosis {
+      min-width: 150px;
+      font-size: 0.8rem;
+    }
+
+    /* Hidden */
+    .hidden { display: none; }
+
+    /* Rate limit notice */
+    .rate-limit-notice {
+      font-size: 0.72rem;
+      color: var(--yellow);
+      margin-bottom: 20px;
+      display: none;
+    }
+    .rate-limit-notice.visible { display: block; }
+
+    /* Reupload */
+    .reupload-btn {
+      background: var(--purple);
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .reupload-btn:hover { background: #9333ea; }
+
+    .reupload-disabled-wrap {
+      display: inline-block;
+      cursor: help;
+    }
+    .reupload-disabled-wrap .reupload-btn[disabled] {
+      pointer-events: none;
+    }
+
+    .reupload-status {
+      font-size: 0.68rem;
+      margin-top: 4px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+
+    .debug-details {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.66rem;
+    }
+    .debug-details summary {
+      cursor: pointer;
+      color: var(--accent);
+    }
+    .debug-details pre {
+      margin-top: 6px;
+      max-height: 220px;
+      overflow: auto;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+
+    .bulk-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .bulk-status {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.4;
+    }
+
+    .col-actions { min-width: 110px; }
+
+    /* Config */
+    .config-toggle {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 8px;
+      text-decoration: underline dotted;
+    }
+    .config-toggle:hover { color: var(--text); background: none; }
+    .config-panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      gap: 8px;
+      align-items: center;
+    }
+    .config-panel.open { display: flex; }
+    .config-panel label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .config-panel input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 6px 10px;
+      outline: none;
+    }
+    .config-panel input:focus { border-color: var(--accent); }
+
+    /* Footer */
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🔍</div>
+      <h1>Arweave TX Inspector</h1>
+    </div>
+    <p class="subtitle">Diagnose why a transaction might be returning 404 on arweave.net</p>
+  </header>
+
+  <div class="input-group">
+    <textarea
+      id="txInput"
+      placeholder="Enter transaction IDs, one per line…"
+      spellcheck="false"
+      autocomplete="off"
+      rows="3"
+    ></textarea>
+    <button id="checkBtn" onclick="runChecks()">Inspect</button>
+  </div>
+  <p class="input-hint">One TX ID per line &mdash; use Ctrl+Enter / ⌘+Enter to run</p>
+  <button class="config-toggle" onclick="document.getElementById('configPanel').classList.toggle('open')">⚙ Config</button>
+  <div id="configPanel" class="config-panel">
+    <label for="uploadUrlInput">Upload endpoint</label>
+    <input id="uploadUrlInput" type="url" value="https://up.arweave.net/tx" spellcheck="false" />
+  </div>
+  <div id="rateLimitNotice" class="rate-limit-notice">⏳ Rate limited (429) — waiting 30 seconds before retrying…</div>
+
+  <div id="results" class="hidden">
+
+    <div class="bulk-actions">
+      <button id="reuploadAllBtn" class="reupload-btn" onclick="reuploadAllAvailable()" disabled>Re-upload all available</button>
+      <button id="downloadAvailableBtn" class="reupload-btn" onclick="downloadSuccessfulAvailable()" disabled>Download available</button>
+      <button id="downloadPendingBtn" class="reupload-btn" onclick="downloadSuccessfulPending()" disabled>Download pending</button>
+      <button id="downloadIncompleteBtn" class="reupload-btn" onclick="downloadIncomplete()" disabled>Download incomplete</button>
+      <span id="reuploadAllStatus" class="bulk-status"></span>
+    </div>
+
+    <!-- Stats -->
+    <div class="card" id="statsCard">
+      <div class="card-title">Summary</div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="level-dist" id="levelDist"></div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card">
+      <div class="card-title">Availability Checks</div>
+      <div class="table-wrapper">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>TXID</th>
+              <th>Layer</th>
+              <th class="col-gw">Raw nodes</th>
+              <th class="col-gw">CDN</th>
+              <th class="col-gw">IRYS</th>
+              <th class="col-gw">AR.IO</th>
+              <th class="col-gw">ArDrive Raw</th>
+              <th class="col-gw">Turbo Gateway</th>
+              <th class="col-gw">Turbo Raw</th>
+              <th class="col-gw">GoldSky</th>
+              <th>Diagnosis</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  Built for the permaweb &mdash;
+  <a href="https://arweave.org" target="_blank" rel="noopener">arweave.org</a>
+</footer>
+
+<script type="module">
+import Arweave from 'arweave';
+
+'use strict';
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+const GRAPHQL_URL = 'https://arweave.net/graphql';
+const GOLDSKY_URL = 'https://arweave-search.goldsky.com/graphql';
+const NATIVE_UPLOAD_URL = 'https://arweave.net';
+const COPYCAT_ENDPOINTS = [
+  'https://alpha.neo.zephyrdev.xyz/~copycat@1.0/arweave/',
+  'https://charlie.neo2.zephyrdev.xyz/~copycat@1.0/arweave/',
+];
+const GOLDSKY_URLS = [
+  GOLDSKY_URL,
+  'https://ao-search-gateway.goldsky.com/graphql',
+  'https://ao-search-gateway.goldsky.com./graphql',
+];
+const GATEWAYS = [
+  {
+    id: 'arweave-raw',
+    label: 'Raw nodes',
+    url: (id) => `https://arweave.net/raw/${id}`,
+    note: 'arweave.net/raw/{txid}',
+    role: 'raw',
+  },
+  {
+    id: 'arweave-main',
+    label: 'CDN',
+    url: (id) => `https://arweave.net/${id}`,
+    note: 'arweave.net/{txid}',
+    role: 'cdn',
+  },
+  {
+    id: 'irys',
+    label: 'IRYS',
+    url: (id) => `https://gateway.irys.xyz/${id}`,
+    note: 'gateway.irys.xyz/{txid}',
+    role: 'irys',
+    source: true,
+  },
+  {
+    id: 'ario',
+    label: 'AR.IO',
+    url: (id) => `https://turbo.ar.io/${id}`,
+    note: 'turbo.ar.io/{txid}',
+    role: 'ario',
+    source: true,
+  },
+  {
+    id: 'ardrive-raw',
+    label: 'ArDrive Raw',
+    url: (id) => `https://ardrive.net/raw/${id}`,
+    note: 'ardrive.net/raw/{txid}',
+    role: 'source',
+    source: true,
+  },
+  {
+    id: 'turbo-gateway',
+    label: 'Turbo Gateway',
+    url: (id) => `https://turbo-gateway.com/${id}`,
+    note: 'turbo-gateway.com/{txid}',
+    role: 'ario',
+    source: true,
+  },
+  {
+    id: 'turbo-raw',
+    label: 'Turbo Raw',
+    url: (id) => `https://turbo-gateway.com/raw/${id}`,
+    note: 'turbo-gateway.com/raw/{txid}',
+    role: 'source',
+    source: true,
+  },
+  {
+    id: 'goldsky',
+    label: 'GoldSky',
+    check: (id) => goldskyCheck(id),
+    meta: true, // informational — does not block diagnosis/actions
+  },
+];
+
+function sourceGatewayResults(state) {
+  return GATEWAYS
+    .filter(gw => gw.source)
+    .map(gw => ({ gateway: gw, result: state[gw.id] }));
+}
+
+function isUsableSourceResult(result) {
+  return !!result?.ok;
+}
+
+function isCorsBlockedSourceResult(result) {
+  return !!(result?.corsLikely && !result?.ok);
+}
+
+function hasUsableSourceGateway(state) {
+  return sourceGatewayResults(state).some(({ result }) => isUsableSourceResult(result));
+}
+
+function hasCorsBlockedSourceGateway(state) {
+  return sourceGatewayResults(state).some(({ result }) => isCorsBlockedSourceResult(result));
+}
+
+function sourceGatewayLabels(state, okOnly = false) {
+  return sourceGatewayResults(state)
+    .filter(({ result }) => okOnly ? result?.ok : isUsableSourceResult(result))
+    .map(({ gateway }) => gateway.label);
+}
+
+function corsBlockedSourceGatewayLabels(state) {
+  return sourceGatewayResults(state)
+    .filter(({ result }) => isCorsBlockedSourceResult(result))
+    .map(({ gateway }) => gateway.label);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function isValidTxId(id) {
+  return /^[a-zA-Z0-9_-]{43}$/.test(id);
+}
+
+function httpChip(status) {
+  if (!status) return `<span class="http-chip http-err">ERR</span>`;
+  const cls = status >= 200 && status < 300 ? 'http-2xx'
+            : status >= 300 && status < 400 ? 'http-3xx'
+            : status >= 400 && status < 500 ? 'http-4xx'
+            : 'http-err';
+  return `<span class="http-chip ${cls}">${status}</span>`;
+}
+
+function shortTx(id) {
+  if (!id) return '—';
+  return id.length > 12 ? id.slice(0, 6) + '…' + id.slice(-4) : id;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Per-domain concurrency limiter (max 5 in-flight requests per domain)
+class ConcurrencyLimiter {
+  constructor(limit) {
+    this.limit = limit;
+    this.running = 0;
+    this.queue = [];
+  }
+
+  run(fn) {
+    return new Promise((resolve, reject) => {
+      const execute = async () => {
+        this.running++;
+        try {
+          resolve(await fn());
+        } catch (err) {
+          reject(err);
+        } finally {
+          this.running--;
+          if (this.queue.length > 0) this.queue.shift()();
+        }
+      };
+      if (this.running < this.limit) execute();
+      else this.queue.push(execute);
+    });
+  }
+}
+
+const DOMAIN_LIMITERS = {};
+function getLimiter(url) {
+  const host = new URL(url).hostname;
+  if (!DOMAIN_LIMITERS[host]) DOMAIN_LIMITERS[host] = new ConcurrencyLimiter(5);
+  return DOMAIN_LIMITERS[host];
+}
+
+function showRateLimitNotice(visible) {
+  document.getElementById('rateLimitNotice').classList.toggle('visible', visible);
+}
+
+// ─── Network ─────────────────────────────────────────────────────────────────
+
+async function headRequest(url) {
+  const result = await getLimiter(url).run(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, { method: 'HEAD', signal: controller.signal, redirect: 'follow' });
+      clearTimeout(timeout);
+      if (res.status === 429) return { _rateLimit: true };
+      return {
+        status: res.status,
+        ok: res.status >= 200 && res.status < 300,
+        contentType: res.headers.get('content-type') || null,
+        offset: res.headers.get('offset') || null,
+      };
+    } catch (err) {
+      const isCors = err instanceof TypeError;
+      return { status: null, ok: false, corsLikely: isCors, error: err.message };
+    }
+  });
+
+  // Slot is released before we sleep, so other requests can proceed
+  if (result._rateLimit) {
+    showRateLimitNotice(true);
+    await sleep(30000);
+    showRateLimitNotice(false);
+    return headRequest(url);
+  }
+
+  return result;
+}
+
+async function getRawJson(txId) {
+  const url = `https://arweave.net/raw/${txId}`;
+  return getLimiter(url).run(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, { method: 'GET', signal: controller.signal, redirect: 'follow' });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  });
+}
+
+async function checkManifestIndexHtml(txId) {
+  const json = await getRawJson(txId);
+  if (!json || typeof json !== 'object') return null;
+  const paths = json.paths;
+  if (!paths || typeof paths !== 'object') return null;
+  const entry = paths['index.html'];
+  if (!entry || !isValidTxId(entry.id)) return null;
+  return entry.id;
+}
+
+async function getJsonFromSources(txId) {
+  const urls = [
+    `https://arweave.net/raw/${txId}`,
+    `https://arweave.ar.io/${txId}`,
+    `https://turbo.ar.io/${txId}`,
+    `https://ardrive.net/raw/${txId}`,
+    `https://turbo-gateway.com/${txId}`,
+    `https://turbo-gateway.com/raw/${txId}`,
+    `https://gateway.irys.xyz/${txId}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const json = JSON.parse(await res.text());
+      if (json && typeof json === 'object') return json;
+    } catch (_) { /* try next source */ }
+  }
+
+  return null;
+}
+
+async function graphqlQuery(query, variables) {
+  const result = await getLimiter(GRAPHQL_URL).run(async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.status === 429) return { _rateLimit: true };
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeout);
+      throw err;
+    }
+  });
+
+  if (result?._rateLimit) {
+    showRateLimitNotice(true);
+    await sleep(30000);
+    showRateLimitNotice(false);
+    return graphqlQuery(query, variables);
+  }
+
+  return result;
+}
+
+async function goldskyCheck(txId) {
+  const result = await getLimiter(GOLDSKY_URL).run(async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(GOLDSKY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query C($id:ID!){transaction(id:$id){id}}', variables: { id: txId } }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.status === 429) return { _rateLimit: true };
+      if (!res.ok) return { ok: false, label: 'Error' };
+      const json = await res.json();
+      const found = !!json?.data?.transaction?.id;
+      return { ok: found, label: found ? 'OK' : 'Not found' };
+    } catch (err) {
+      clearTimeout(timeout);
+      const isCors = err instanceof TypeError;
+      return { ok: false, label: isCors ? 'CORS' : 'Error', corsLikely: isCors };
+    }
+  });
+
+  if (result?._rateLimit) {
+    showRateLimitNotice(true);
+    await sleep(30000);
+    showRateLimitNotice(false);
+    return goldskyCheck(txId);
+  }
+
+  return result;
+}
+
+const TX_QUERY = `
+  query GetTx($id: ID!) {
+    transaction(id: $id) {
+      id
+      ingested_at
+      data { size }
+      tags { name value }
+      block { height }
+      bundledIn {
+        id
+      }
+    }
+  }
+`;
+
+const PARTITION_SIZE = BigInt(3_600_000_000_000); // 3.6 TB (90% of 4 TB, per ar_consensus.hrl)
+
+// ─── Block height estimation from weave offset ───────────────────────────────
+
+const _blockWeaveSizeCache = {};
+
+async function _getBlockWeaveSize(height) {
+  if (_blockWeaveSizeCache[height] !== undefined) return _blockWeaveSizeCache[height];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(`https://arweave.net/block/height/${height}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const weaveSize = json.weave_size != null ? BigInt(json.weave_size) : null;
+    if (weaveSize !== null) _blockWeaveSizeCache[height] = weaveSize;
+    return weaveSize;
+  } catch {
+    return null;
+  }
+}
+
+async function guessBlockFromOffset(offset) {
+  try {
+    // Use /info only to get the current chain height as the upper bound
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const infoRes = await fetch('https://arweave.net/info', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!infoRes.ok) return null;
+    const info = await infoRes.json();
+    if (!info.height) return null;
+
+    const targetOffset = BigInt(offset);
+
+    // Binary search: find the smallest block height where weave_size >= targetOffset.
+    // block.weave_size is the cumulative weave size after that block, so the block that
+    // "contains" a global offset is the first one whose weave_size reaches it.
+    let lo = 0, hi = info.height;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const weaveSize = await _getBlockWeaveSize(mid);
+      if (weaveSize === null) return null;
+      if (weaveSize < targetOffset) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePartition(txId, levelInfo, state) {
+  // For L1 TXs, reuse the offset header already captured by the arweave-raw check.
+  const isL1 = !levelInfo?.chain || levelInfo.chain.length === 1;
+  if (isL1 && state?.['arweave-raw']?.offset != null) {
+    const offset = state['arweave-raw'].offset;
+    const partition = Number(BigInt(offset) / PARTITION_SIZE);
+    return { partition, offset };
+  }
+
+  // For L2/L3 TXs, HEAD the raw endpoint of the root L1 TX for its offset header,
+  // falling back to the /tx/{id}/offset JSON API if the header is absent.
+  const targetId = (levelInfo?.chain?.length > 1)
+    ? levelInfo.chain[levelInfo.chain.length - 1]
+    : txId;
+
+  const rawUrl = `https://arweave.net/raw/${targetId}`;
+  try {
+    const headResult = await headRequest(rawUrl);
+    if (headResult?.offset != null) {
+      const offset = headResult.offset;
+      const partition = Number(BigInt(offset) / PARTITION_SIZE);
+      return { partition, offset };
+    }
+  } catch { /* fall through to JSON API */ }
+
+  // Fallback: dedicated offset endpoint
+  const offsetUrl = `https://arweave.net/tx/${targetId}/offset`;
+  try {
+    const res = await getLimiter(offsetUrl).run(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const r = await fetch(offsetUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch {
+        clearTimeout(timeout);
+        return null;
+      }
+    });
+    if (!res) return null;
+    const endOffset   = BigInt(res.offset);
+    const size        = BigInt(res.size);
+    const startOffset = endOffset - size;
+    const partition   = Number(startOffset / PARTITION_SIZE);
+    return { partition, offset: res.offset };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveBundleLevel(txId) {
+  try {
+    const r1 = await graphqlQuery(TX_QUERY, { id: txId });
+    const tx1 = r1?.data?.transaction;
+
+    if (!tx1) return { level: 'unknown', chain: [], found: false };
+
+    const ingestedAt  = tx1.ingested_at ?? null;
+    const dataSize    = tx1.data?.size != null ? parseInt(tx1.data.size, 10) : null;
+    const tags        = tx1.tags ?? [];
+    const blockHeight = tx1.block?.height ?? null;
+    const bundleId1 = tx1.bundledIn?.id;
+    if (!bundleId1) return { level: 'L1', chain: [txId], found: true, ingestedAt, dataSize, tags, blockHeight };
+
+    const r2 = await graphqlQuery(TX_QUERY, { id: bundleId1 });
+    const tx2 = r2?.data?.transaction;
+
+    if (!tx2) return { level: 'L2', chain: [txId, bundleId1], found: true, parentMissing: true, ingestedAt, dataSize, tags, blockHeight };
+
+    const bundleId2 = tx2.bundledIn?.id;
+    if (!bundleId2) return { level: 'L2', chain: [txId, bundleId1], found: true, ingestedAt, dataSize, tags, blockHeight };
+
+    return { level: 'L3', chain: [txId, bundleId1, bundleId2], found: true, ingestedAt, dataSize, tags, blockHeight };
+  } catch (err) {
+    return { level: 'unknown', chain: [], found: false, error: err.message };
+  }
+}
+
+function normalizeContentType(ct) {
+  const normalized = (ct || '').split(';')[0].trim().toLowerCase();
+  if (normalized === 'image/svg xml') return 'image/svg+xml';
+  if (normalized === 'application/x.arweave-manifest json') return 'application/x.arweave-manifest+json';
+  return normalized;
+}
+
+function contentTypesEquivalent(a, b) {
+  const left = normalizeContentType(a);
+  const right = normalizeContentType(b);
+  if (left === right) return true;
+  return (
+    (left === 'application/json' && right === 'application/x.arweave-manifest+json') ||
+    (right === 'application/json' && left === 'application/x.arweave-manifest+json')
+  );
+}
+
+function escapeAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function debugHtml(debug) {
+  if (!debug || debug.length === 0) return '';
+  return `<details class="debug-details">
+    <summary>Details</summary>
+    <pre>${escapeHtml(debug.join('\n'))}</pre>
+  </details>`;
+}
+
+const MANIFEST_CONTENT_TYPES = new Set([
+  'application/x.arweave-manifest+json',
+  'application/x.arweave-manifest json',
+]);
+
+async function computeUploadValidation(txId, state) {
+  const raw  = state['arweave-raw'];
+  const cdn  = state['arweave-main'];
+
+  // Re-upload button is only shown when raw is not ok
+  if (raw?.ok) return null;
+
+  const gqlContentType = (state._level?.tags ?? []).find(t => t.name === 'Content-Type')?.value;
+
+  // Determine which source would be used and its served content-type
+  let servedContentType = null;
+  if (cdn?.ok) {
+    servedContentType = cdn.contentType;
+  } else {
+    const source = sourceGatewayResults(state).find(({ result }) => isUsableSourceResult(result) && result.contentType);
+    servedContentType = source?.result?.contentType || null;
+  }
+
+  if (gqlContentType && servedContentType) {
+    const gqlNorm    = normalizeContentType(gqlContentType);
+    const servedNorm = normalizeContentType(servedContentType);
+    if (!contentTypesEquivalent(gqlContentType, servedContentType)) {
+      return `Content-Type mismatch: gateway serves "${servedNorm}" but GraphQL tag says "${gqlNorm}"`;
+    }
+  }
+
+  // For manifest content types, validate the data is parseable JSON
+  const gqlNorm = normalizeContentType(gqlContentType);
+  if (MANIFEST_CONTENT_TYPES.has(gqlNorm)) {
+    const json = await getJsonFromSources(txId);
+    if (!json || typeof json !== 'object') {
+      return 'Manifest content type detected but the data is not valid JSON — re-upload would produce a broken manifest';
+    }
+  }
+
+  return null;
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+
+function gwCellHtml(result) {
+  if (result === undefined) {
+    return `<span class="gw-cell"><span class="dot dot-spin"></span></span>`;
+  }
+  if (result.ok) {
+    const chip = result.label ? `<span class="http-chip http-2xx">${result.label}</span>` : httpChip(result.status);
+    return `<span class="gw-cell">${chip} <span class="dot dot-green"></span></span>`;
+  }
+  if (result.corsLikely) {
+    return `<span class="gw-cell"><span class="dot dot-yellow"></span> <span class="status-warn" style="font-size:0.7rem">CORS</span></span>`;
+  }
+  const chip = result.label ? `<span class="http-chip http-4xx">${result.label}</span>` : httpChip(result.status);
+  return `<span class="gw-cell">${chip} <span class="dot dot-red"></span></span>`;
+}
+
+const DEGRADED_PARTITIONS = new Set([19, 46]);
+
+function partitionBadgeHtml(partitionInfo) {
+  if (!partitionInfo) return '';
+  const warn = DEGRADED_PARTITIONS.has(partitionInfo.partition);
+  const cls   = warn ? ' partition-warn' : '';
+  const title = warn
+    ? 'This belongs to a partition that Arweave is missing some information'
+    : 'Weave partition';
+  return `<span class="partition-badge${cls}" title="${title}">P:${partitionInfo.partition}</span>`;
+}
+
+function levelBadgeHtml(info) {
+  if (!info) {
+    return `<span class="level-badge level-unknown"><span class="dot dot-spin"></span></span>`;
+  }
+  const title = info.chain && info.chain.length > 1 ? ` title="${info.chain.join(' → ')}"` : '';
+  return `<span class="level-badge level-${info.level}"${title}>${info.level}</span>`;
+}
+
+function diagnosisCellHtml(state) {
+  const levelInfo = state._level;
+  const allGwDone = GATEWAYS.filter(gw => !gw.meta).every(gw => state[gw.id] !== undefined);
+  const levelDone = levelInfo !== undefined;
+
+  if (!allGwDone || !levelDone) {
+    return `<span class="status-idle">Checking…</span>`;
+  }
+
+  const raw  = state['arweave-raw'];
+  const cdn  = state['arweave-main'];
+  const nonMetaResults = GATEWAYS.filter(gw => !gw.meta).map(gw => state[gw.id]);
+  const allFailed = nonMetaResults.every(r => r && !r.ok && !r.corsLikely);
+
+  if (raw?.ok && cdn?.ok) {
+    return `<span class="status-ok">✓ Fully available</span>`;
+  }
+  if (raw?.ok && !cdn?.ok) {
+    const tags = levelInfo?.tags ?? [];
+    const isBundleFormatBinary = tags.some(t => t.name === 'Bundle-Format' && t.value === 'binary');
+    if (isBundleFormatBinary) {
+      return `<span class="status-warn">⚠ arweave.net doesn't render bundles — fetch using the raw endpoint</span>`;
+    }
+    return `<span class="status-warn">⚠ Indexed, but chunks missing or blacklisted!</span>`;
+  }
+  if (!raw?.ok && cdn?.ok) {
+    return `<span class="status-warn">⚠ Uploader only</span>`;
+  }
+  const sourceLabels = sourceGatewayLabels(state, true);
+  if (!raw?.ok && !cdn?.ok && sourceLabels.length > 0) {
+    const who = sourceLabels.join('/');
+    return `<span class="status-warn">Readable on ${who}; reupload will try it as a source</span>`;
+  }
+  const corsLabels = corsBlockedSourceGatewayLabels(state);
+  if (!raw?.ok && !cdn?.ok && corsLabels.length > 0) {
+    const who = corsLabels.join('/');
+    return `<span class="status-warn">Source on ${who}, but browser is CORS-blocked; use CLI reupload</span>`;
+  }
+  if (levelInfo && (levelInfo.level === 'L2' || levelInfo.level === 'L3') && allFailed) {
+    return `<span class="status-fail">✗ Bundle not indexed (${levelInfo.level})</span>`;
+  }
+  if (allFailed) {
+    if (levelInfo && !levelInfo.found) {
+      return `<span class="status-fail">✗ Not found — invalid or pending</span>`;
+    }
+    return `<span class="status-fail">✗ Unavailable on all gateways</span>`;
+  }
+
+  return `<span class="status-idle">Incomplete</span>`;
+}
+
+function skeletonRow(txId, isSubRow = false) {
+  const rowClass = isSubRow ? ' class="sub-row"' : '';
+  const prefix = isSubRow ? '<span class="sub-row-arrow">↳</span>' : '';
+  return `
+    <tr id="row-${txId}"${rowClass}>
+      <td class="col-txid">
+        ${prefix}<a href="https://arweave.net/${txId}" target="_blank" rel="noopener" title="${txId}">${shortTx(txId)}</a>
+      </td>
+      <td class="col-layer">${levelBadgeHtml(null)}</td>
+      ${GATEWAYS.map(() => `<td class="col-gw">${gwCellHtml(undefined)}</td>`).join('')}
+      <td class="col-diagnosis"><span class="status-idle">Checking…</span></td>
+      <td class="col-actions"><div id="reupload-status-${txId}" class="reupload-status"></div></td>
+    </tr>
+  `;
+}
+
+function updateTableRow(txId, state) {
+  let row = document.getElementById(`row-${txId}`);
+  if (!row) return;
+  const expectedCells = GATEWAYS.length + 4;
+  if (row.querySelectorAll('td').length < expectedCells) {
+    const isSubRow = row.classList.contains('sub-row');
+    row.outerHTML = skeletonRow(txId, isSubRow);
+    row = document.getElementById(`row-${txId}`);
+    if (!row) return;
+  }
+  const cells = row.querySelectorAll('td');
+  const ingestedAt = state._level?.ingestedAt;
+  const dataSize   = state._level?.dataSize;
+  let metaHtml = '';
+  if (ingestedAt) {
+    const d = new Date(ingestedAt * 1000);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const datePart = sameDay(d, today) ? 'Today' : sameDay(d, yesterday) ? 'Yesterday' : d.toLocaleDateString();
+    metaHtml += `<span class="tx-ingested">${datePart}, ${d.toLocaleTimeString()}</span>`;
+  }
+  if (dataSize != null) {
+    const sizeStr = dataSize >= 1024 * 1024
+      ? `${(dataSize / (1024 * 1024)).toFixed(2)} MB`
+      : dataSize >= 1024
+        ? `${(dataSize / 1024).toFixed(1)} KB`
+        : `${dataSize} B`;
+    metaHtml += `<span class="tx-ingested">${sizeStr}</span>`;
+  }
+  const contentType = (state._level?.tags ?? []).find(t => t.name === 'Content-Type')?.value;
+  if (contentType) {
+    metaHtml += `<span class="tx-ingested" title="Content-Type">${contentType}</span>`;
+  }
+  const blockHeight  = state._level?.blockHeight;
+  const weaveOffset  = state['arweave-raw']?.offset ?? state._partition?.offset;
+  if (blockHeight != null) {
+    const guessed = state._level?.blockHeightGuessed;
+    const prefix  = guessed ? '~' : '';
+    const title   = guessed ? 'Estimated block height (derived from weave offset via binary search)' : 'Block height';
+    metaHtml += `<span class="tx-ingested" title="${title}">${prefix}#${blockHeight.toLocaleString()}</span>`;
+  } else if (weaveOffset != null) {
+    metaHtml += `<span class="tx-ingested"><button class="find-block-btn" id="find-block-btn-${txId}" onclick="findBlockHeight('${txId}')">Find block</button></span>`;
+  }
+  cells[0].innerHTML = `<a href="https://arweave.net/${txId}" target="_blank" rel="noopener" title="${txId}">${shortTx(txId)}</a>${metaHtml}`;
+  cells[1].innerHTML = levelBadgeHtml(state._level) + partitionBadgeHtml(state._partition);
+  GATEWAYS.forEach((gw, i) => {
+    cells[2 + i].innerHTML = gwCellHtml(state[gw.id]);
+  });
+  if (!cells[2 + GATEWAYS.length] || !cells[3 + GATEWAYS.length]) return;
+  cells[2 + GATEWAYS.length].innerHTML = diagnosisCellHtml(state);
+  if (!activeReuploads.has(txId)) {
+    cells[3 + GATEWAYS.length].innerHTML = actionsCellHtml(txId, state);
+  }
+  updateBulkReuploadButton();
+}
+
+function pct(x, n) {
+  return n > 0 ? Math.round(x / n * 100) : 0;
+}
+
+function pctClass(x, n) {
+  const p = pct(x, n);
+  return p === 100 ? 'status-ok' : p === 0 ? 'status-fail' : 'status-warn';
+}
+
+function renderStats(allStates, completedIds) {
+  const n = completedIds.length;
+  if (n === 0) return;
+
+  let fullyAvailable = 0;
+  const gwCounts = {};
+  GATEWAYS.forEach(gw => { gwCounts[gw.id] = 0; });
+  const levelCounts = { L1: 0, L2: 0, L3: 0, unknown: 0 };
+
+  completedIds.forEach(txId => {
+    const s = allStates[txId] || {};
+    if (s['arweave-raw']?.ok && s['arweave-main']?.ok) fullyAvailable++;
+    GATEWAYS.forEach(gw => { if (s[gw.id]?.ok) gwCounts[gw.id]++; });
+    const lvl = s._level?.level ?? 'unknown';
+    levelCounts[lvl] = (levelCounts[lvl] ?? 0) + 1;
+  });
+
+  document.getElementById('statsGrid').innerHTML = [
+    { value: `${pct(fullyAvailable, n)}%`, label: 'Fully Available', sub: `${fullyAvailable} / ${n} TXs`, cls: pctClass(fullyAvailable, n) },
+    ...GATEWAYS.map(gw => ({
+      value: `${pct(gwCounts[gw.id], n)}%`,
+      label: gw.label,
+      sub: `${gwCounts[gw.id]} / ${n} TXs`,
+      cls: pctClass(gwCounts[gw.id], n),
+    })),
+  ].map(s => `
+    <div class="stat-card">
+      <div class="stat-value ${s.cls}">${s.value}</div>
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-sub">${s.sub}</div>
+    </div>
+  `).join('');
+
+  const levelEntries = Object.entries(levelCounts).filter(([, v]) => v > 0);
+  document.getElementById('levelDist').innerHTML = levelEntries.length > 0
+    ? `<span class="level-dist-label">Layers:</span> ${levelEntries.map(([k, v]) =>
+        `<span class="level-badge level-${k}">${k}: ${v} (${pct(v, n)}%)</span>`
+      ).join('')}`
+    : '';
+}
+
+// ─── Reupload helpers ─────────────────────────────────────────────────────────
+
+function b64urlToBytes(b64url) {
+  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  // atob requires length to be a multiple of 4; add padding if needed
+  b64 += '='.repeat((4 - b64.length % 4) % 4);
+  const binary = atob(b64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlToString(value) {
+  return new TextDecoder().decode(b64urlToBytes(value));
+}
+
+function maybeB64urlText(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value) && value.length % 4 !== 1;
+}
+
+async function sha256B64url(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return bytesToB64url(new Uint8Array(digest));
+}
+
+function concatU8(...arrays) {
+  const total = arrays.reduce((s, a) => s + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+function le8(n) {
+  const b = new Uint8Array(8);
+  let v = n;
+  for (let i = 0; i < 8 && v > 0; i++) { b[i] = v & 0xFF; v = Math.floor(v / 256); }
+  return b;
+}
+
+function avroZigzag(n) {
+  let z = n >= 0 ? n * 2 : n * -2 - 1;
+  const bs = [];
+  do {
+    const b = z & 0x7F;
+    z = Math.floor(z / 128);
+    bs.push(z > 0 ? b | 0x80 : b);
+  } while (z > 0);
+  return new Uint8Array(bs);
+}
+
+function encodeAvroTags(tags) {
+  if (!tags || tags.length === 0) return new Uint8Array(0);
+  const enc = new TextEncoder();
+  const parts = [avroZigzag(tags.length)];
+  for (const t of tags) {
+    const name = enc.encode(t.name);
+    const value = enc.encode(t.value);
+    parts.push(avroZigzag(name.length), name);
+    parts.push(avroZigzag(value.length), value);
+  }
+  parts.push(new Uint8Array([0]));
+  return concatU8(...parts);
+}
+
+const SIGNATURE_TYPE_LENGTHS = {
+  1: { sig: 512, owner: 512, label: 'Arweave' },
+  2: { sig: 64, owner: 32, label: 'ED25519' },
+  3: { sig: 65, owner: 65, label: 'Ethereum' },
+  4: { sig: 64, owner: 32, label: 'Solana' },
+  5: { sig: 64, owner: 32, label: 'Aptos' },
+  6: { sig: 2052, owner: 1025, label: 'MultiAptos' },
+  7: { sig: 65, owner: 42, label: 'Typed Ethereum' },
+};
+
+function normalizeSignatureType(value) {
+  const n = Number(value);
+  return SIGNATURE_TYPE_LENGTHS[n] ? n : null;
+}
+
+function signatureTypeCandidates(meta) {
+  const sigLen = b64urlToBytes(meta.signature || '').length;
+  const ownerLen = b64urlToBytes(meta.owner || meta?.owner?.key || '').length;
+  const explicit = normalizeSignatureType(meta.signature_type ?? meta.signatureType ?? meta.signatureTypeId);
+  const matches = Object.entries(SIGNATURE_TYPE_LENGTHS)
+    .filter(([, cfg]) => cfg.sig === sigLen && cfg.owner === ownerLen)
+    .map(([type]) => Number(type));
+
+  if (explicit && matches.includes(explicit)) {
+    return [explicit, ...matches.filter(type => type !== explicit)];
+  }
+  if (matches.length > 0) return matches;
+  if (explicit) return [explicit];
+  return [1];
+}
+
+function buildAns104Item(meta, dataBytes, signatureType) {
+  const sigType = signatureType ?? signatureTypeCandidates(meta)[0];
+  const sig     = b64urlToBytes(meta.signature);
+  const owner   = b64urlToBytes(meta.owner || meta?.owner?.key || '');
+  const hasTarget = !!(meta.target && meta.target.length > 0);
+  const hasAnchor = !!(meta.anchor && meta.anchor.length > 0);
+  const target  = hasTarget ? b64urlToBytes(meta.target) : new Uint8Array(0);
+  const anchor  = hasAnchor ? meta.anchorBytes : new Uint8Array(0);
+  const tags    = meta.tags || [];
+  const avroTagBytes = encodeAvroTags(tags);
+
+  return concatU8(
+    new Uint8Array([sigType & 0xFF, (sigType >> 8) & 0xFF]),
+    sig,
+    owner,
+    new Uint8Array([hasTarget ? 1 : 0]),
+    target,
+    new Uint8Array([hasAnchor ? 1 : 0]),
+    anchor,
+    le8(tags.length),
+    le8(avroTagBytes.length),
+    avroTagBytes,
+    dataBytes,
+  );
+}
+
+function anchorByteCandidates(anchor) {
+  if (!anchor) return [new Uint8Array(0)];
+
+  const candidates = [];
+  const utf8 = new TextEncoder().encode(anchor);
+  if (utf8.length === 32) candidates.push(utf8);
+
+  try {
+    const decoded = b64urlToBytes(anchor);
+    if (decoded.length === 32) candidates.push(decoded);
+  } catch (_) { /* keep UTF-8 candidate only */ }
+
+  return candidates.length > 0 ? candidates : [utf8];
+}
+
+function buildAns104Candidates(meta, dataBytes) {
+  const candidates = [];
+  const anchors = anchorByteCandidates(meta.anchor);
+
+  for (const signatureType of signatureTypeCandidates(meta)) {
+    for (let i = 0; i < anchors.length; i++) {
+      const label = SIGNATURE_TYPE_LENGTHS[signatureType]?.label || `signature type ${signatureType}`;
+      candidates.push({
+        signatureType,
+        label: anchors.length > 1 ? `${label}, anchor ${i + 1}` : label,
+        signature: b64urlToBytes(meta.signature),
+        body: buildAns104Item({ ...meta, anchorBytes: anchors[i] }, dataBytes, signatureType),
+      });
+    }
+  }
+
+  return candidates;
+}
+
+const REUPLOAD_SOURCE_BASES = [
+  'https://arweave.ar.io',
+  'https://turbo.ar.io',
+  'https://arweave.net',
+  'https://ardrive.net/raw/{txid}',
+  'https://turbo-gateway.com',
+  'https://turbo-gateway.com/raw/{txid}',
+  'https://gateway.irys.xyz',
+];
+
+function urlForTx(base, txId) {
+  const trimmed = base.replace(/\/+$/, '');
+  if (trimmed.includes('{txid}')) return trimmed.replaceAll('{txid}', txId);
+  return `${trimmed}/${txId}`;
+}
+
+function parentBundleUrls(parentId) {
+  const urls = [];
+  const seen = new Set();
+  const add = (label, url) => {
+    if (seen.has(url)) return;
+    seen.add(url);
+    urls.push({ label, url });
+  };
+
+  add('arweave.net raw parent', `https://arweave.net/raw/${parentId}`);
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    const trimmed = base.replace(/\/+$/, '');
+    add(`${base} parent`, urlForTx(base, parentId));
+    if (!trimmed.includes('{txid}')) add(`${base} raw parent`, `${trimmed}/raw/${parentId}`);
+  }
+  return urls;
+}
+
+async function tryFetchRange(url, start, end, debug) {
+  const expected = end - start + 1;
+  try {
+    const res = await fetch(url, { headers: { Range: `bytes=${start}-${end}` } });
+    const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
+    debug?.push(`range ${url} ${start}-${end} -> HTTP ${res.status}${contentLength ? ` ${contentLength} bytes` : ''}`);
+    if (!res.ok && res.status !== 206) return null;
+    if (res.status !== 206 && contentLength > Math.max(expected * 4, 1024 * 1024)) {
+      await res.body?.cancel?.();
+      debug?.push(`range ${url} -> skipped because server ignored Range and advertised ${contentLength} bytes`);
+      return null;
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length === expected) return bytes;
+    if (bytes.length > end && res.status !== 206) return bytes.slice(start, end + 1);
+    if (bytes.length > expected) return bytes.slice(0, expected);
+    return bytes;
+  } catch (err) {
+    debug?.push(`range ${url} ${start}-${end} -> error: ${err.message}`);
+    return null;
+  }
+}
+
+function sameBytes(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+async function fetchBundleItemFromUrl(parentId, childId, url, debug) {
+  const countBytes = await tryFetchRange(url, 0, 31, debug);
+  if (!countBytes || countBytes.length < 32) return null;
+  const count = byteArrayToLong(countBytes.slice(0, 32));
+  if (!Number.isSafeInteger(count) || count <= 0 || count > 1000000) {
+    debug?.push(`bundle ${url} -> invalid item count ${count}`);
+    return null;
+  }
+
+  const headerLength = 32 + count * 64;
+  const header = await tryFetchRange(url, 0, headerLength - 1, debug);
+  if (!header || header.length < headerLength) return null;
+
+  const childIdBytes = b64urlToBytes(childId);
+  let dataOffset = 0;
+  for (let i = 0; i < count; i++) {
+    const entryOffset = 32 + i * 64;
+    const itemSize = byteArrayToLong(header.slice(entryOffset, entryOffset + 32));
+    const itemId = header.slice(entryOffset + 32, entryOffset + 64);
+    if (sameBytes(itemId, childIdBytes)) {
+      const start = headerLength + dataOffset;
+      const end = start + itemSize - 1;
+      const itemBytes = await tryFetchRange(url, start, end, debug);
+      if (!itemBytes || itemBytes.length < itemSize) return null;
+      debug?.push(`bundle ${url} -> found ${shortTx(childId)} in parent ${shortTx(parentId)} at ${start}, ${itemSize} bytes`);
+      return itemBytes.length === itemSize ? itemBytes : itemBytes.slice(0, itemSize);
+    }
+    dataOffset += itemSize;
+  }
+
+  debug?.push(`bundle ${url} -> ${shortTx(childId)} not found in ${count} item headers`);
+  return null;
+}
+
+async function fetchBundledInCandidates(txId, metas, debug) {
+  const parentIds = [...new Set(metas.map(({ meta }) => meta.bundledIn).filter(isValidTxId))];
+  const candidates = [];
+  for (const parentId of parentIds) {
+    for (const { label, url } of parentBundleUrls(parentId)) {
+      const itemBytes = await fetchBundleItemFromUrl(parentId, txId, url, debug);
+      if (!itemBytes) continue;
+      const candidate = candidateFromAns104Bytes(`${label} ${shortTx(parentId)}`, itemBytes);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+function arweaveFromUrl(url) {
+  const parsed = new URL(url);
+  return Arweave.init({
+    host: parsed.hostname,
+    port: parsed.port ? Number(parsed.port) : parsed.protocol === 'http:' ? 80 : 443,
+    protocol: parsed.protocol.replace(':', ''),
+  });
+}
+
+function candidateFromAns104Bytes(label, bytes) {
+  const signatureType = bytes[0] + (bytes[1] << 8);
+  const sigLength = SIGNATURE_TYPE_LENGTHS[signatureType]?.sig;
+  if (!sigLength || bytes.length < 2 + sigLength) return null;
+  return {
+    signatureType,
+    label,
+    signature: bytes.subarray(2, 2 + sigLength),
+    body: bytes,
+  };
+}
+
+async function fetchAns104Candidates(urls, debug) {
+  const candidates = [];
+  for (const { label, url } of urls) {
+    try {
+      const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}require-codec=ans104@1.0`);
+      debug?.push(`ans104 ${label} -> HTTP ${res.status}`);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      debug?.push(`ans104 ${label} -> ${bytes.length} bytes`);
+      const candidate = candidateFromAns104Bytes(label, bytes);
+      debug?.push(`ans104 ${label} -> ${candidate ? `candidate sigType ${candidate.signatureType}` : 'not a recognized ANS-104 item'}`);
+      if (candidate) candidates.push(candidate);
+    } catch (err) {
+      debug?.push(`ans104 ${label} -> error: ${err.message}`);
+    }
+  }
+  return candidates;
+}
+
+async function tryFetchJson(url, debug) {
+  try {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || 'unknown';
+    debug?.push(`json ${url} -> HTTP ${res.status}, content-type: ${contentType}`);
+    if (!res.ok) return null;
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      debug?.push(`json ${url} -> parse error: ${err.message}; preview: ${previewText(text)}`);
+      return null;
+    }
+    debug?.push(`json ${url} -> keys: ${Object.keys(json || {}).join(',') || 'none'}`);
+    return json;
+  } catch (err) {
+    debug?.push(`json ${url} -> error: ${err.message}`);
+    return null;
+  }
+}
+
+async function tryFetchBytes(url, debug) {
+  try {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || 'unknown';
+    debug?.push(`bytes ${url} -> HTTP ${res.status}, content-type: ${contentType}`);
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    debug?.push(`bytes ${url} -> ${bytes.length} bytes`);
+    if (bytes.length <= 128 || contentType.includes('text') || contentType.includes('html') || contentType.includes('json')) {
+      debug?.push(`bytes ${url} -> preview: ${previewBytes(bytes)}`);
+    }
+    return bytes;
+  } catch (err) {
+    debug?.push(`bytes ${url} -> error: ${err.message}`);
+    return null;
+  }
+}
+
+async function tryFetchBytesWithHeaders(url, debug) {
+  try {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || 'unknown';
+    debug?.push(`bytes+headers ${url} -> HTTP ${res.status}, content-type: ${contentType}`);
+    debug?.push(`bytes+headers ${url} -> x-ar-io-data-id: ${res.headers.get('x-ar-io-data-id') || 'none'}, root: ${res.headers.get('x-ar-io-root-transaction-id') || 'none'}`);
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    debug?.push(`bytes+headers ${url} -> ${bytes.length} bytes`);
+    if (bytes.length <= 128 || contentType.includes('text') || contentType.includes('html') || contentType.includes('json')) {
+      debug?.push(`bytes+headers ${url} -> preview: ${previewBytes(bytes)}`);
+    }
+    return { bytes, headers: res.headers };
+  } catch (err) {
+    debug?.push(`bytes+headers ${url} -> error: ${err.message}`);
+    return null;
+  }
+}
+
+function previewText(text) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 180) || '(empty)';
+}
+
+function previewBytes(bytes) {
+  try {
+    return previewText(new TextDecoder().decode(bytes));
+  } catch (_) {
+    return bytesToB64url(bytes).slice(0, 180);
+  }
+}
+
+function normalizeOwner(owner) {
+  if (!owner) return '';
+  if (typeof owner === 'string') return owner;
+  return owner.key || owner.address || '';
+}
+
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [[]];
+  const asIs = tags.map(tag => ({
+    name: String(tag.name ?? ''),
+    value: String(tag.value ?? ''),
+  }));
+
+  const decoded = asIs.map(tag => {
+    try {
+      return {
+        name: maybeB64urlText(tag.name) ? b64urlToString(tag.name) : tag.name,
+        value: maybeB64urlText(tag.value) ? b64urlToString(tag.value) : tag.value,
+      };
+    } catch (_) {
+      return tag;
+    }
+  });
+
+  const variants = [];
+  const seen = new Set();
+  for (const tagSet of JSON.stringify(asIs) === JSON.stringify(decoded) ? [asIs] : [asIs, decoded]) {
+    for (const variant of contentTypeTagVariants(tagSet)) {
+      const key = JSON.stringify(variant);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      variants.push(variant);
+    }
+  }
+  return variants.length > 0 ? variants : [[]];
+}
+
+function contentTypeTagVariants(tags) {
+  const variants = [tags];
+  for (let i = 0; i < tags.length; i++) {
+    const tag = tags[i];
+    if (String(tag.name).toLowerCase() !== 'content-type') continue;
+    if (tag.value !== 'application/x.arweave-manifest json') continue;
+    const plusTags = tags.map((candidate, index) => index === i
+      ? { ...candidate, value: 'application/x.arweave-manifest+json' }
+      : candidate);
+    variants.push(plusTags);
+  }
+  return variants;
+}
+
+function metaCandidates(source, rawMeta) {
+  const base = rawMeta?.data?.transaction || rawMeta?.transaction || rawMeta;
+  const owner = normalizeOwner(base?.owner);
+  if (!base?.signature || !owner) return [];
+
+  return normalizeTags(base.tags).map((tags, i) => ({
+    source: i === 0 ? source : `${source} decoded-tags`,
+    meta: {
+      signature: base.signature,
+      owner,
+      target: base.target || base.recipient || '',
+      anchor: base.anchor || '',
+      tags,
+      dataSize: parseInt(base.data?.size || '0', 10),
+      bundledIn: base.bundledIn?.id || '',
+    },
+  }));
+}
+
+function titleCaseTagName(name) {
+  return name.split('-').map(part => part ? part[0].toUpperCase() + part.slice(1) : part).join('-');
+}
+
+function tagNamesFromSignatureInput(value) {
+  const names = [];
+  const re = /"x-arweave-tag-([^"]+)"/g;
+  let match;
+  while ((match = re.exec(value || ''))) {
+    if (match[1] !== 'count') names.push(match[1]);
+  }
+  return names;
+}
+
+function headerMetaCandidate(source, headers) {
+  const signature = headers.get('x-arweave-signature');
+  const owner = headers.get('x-arweave-owner');
+  if (!signature || !owner) return null;
+  if (headers.get('x-arweave-signature-type') === '0') {
+    return {
+      source,
+      nativeL1: true,
+      servedDataId: headers.get('x-ar-io-data-id') || '',
+      rootTransactionId: headers.get('x-ar-io-root-transaction-id') || '',
+    };
+  }
+
+  const tags = [];
+  const seen = new Set();
+  for (const tagName of tagNamesFromSignatureInput(headers.get('signature-input'))) {
+    const value = headers.get(`x-arweave-tag-${tagName}`);
+    if (value == null) continue;
+    tags.push({ name: titleCaseTagName(tagName), value });
+    seen.add(`x-arweave-tag-${tagName}`);
+  }
+  for (const [name, value] of headers.entries()) {
+    if (!name.startsWith('x-arweave-tag-') || name === 'x-arweave-tag-count' || seen.has(name)) continue;
+    tags.push({ name: titleCaseTagName(name.slice('x-arweave-tag-'.length)), value });
+  }
+
+  return {
+    source,
+    meta: {
+      signature,
+      owner,
+      signature_type: headers.get('x-arweave-signature-type') || undefined,
+      target: headers.get('x-arweave-target') || '',
+      anchor: headers.get('x-arweave-anchor') || '',
+      tags,
+      dataSize: 0,
+    },
+    servedDataId: headers.get('x-ar-io-data-id') || '',
+    rootTransactionId: headers.get('x-ar-io-root-transaction-id') || '',
+  };
+}
+
+function byteArrayToLong(bytes) {
+  let value = 0;
+  for (let i = bytes.length - 1; i >= 0; i--) value = value * 256 + bytes[i];
+  return value;
+}
+
+function ans104HeaderLength(bytes) {
+  const signatureType = bytes[0] + (bytes[1] << 8);
+  const cfg = SIGNATURE_TYPE_LENGTHS[signatureType];
+  if (!cfg) return null;
+  let offset = 2 + cfg.sig + cfg.owner;
+  if (offset >= bytes.length) return null;
+  const targetPresent = bytes[offset] === 1;
+  offset += targetPresent ? 33 : 1;
+  if (offset >= bytes.length) return null;
+  const anchorPresent = bytes[offset] === 1;
+  offset += anchorPresent ? 33 : 1;
+  if (offset + 16 > bytes.length) return null;
+  const tagBytesLength = byteArrayToLong(bytes.subarray(offset + 8, offset + 16));
+  return offset + 16 + tagBytesLength;
+}
+
+function extractAns104AtOffset(rootBytes, itemOffset, itemSize = '') {
+  const start = Number(itemOffset);
+  if (!Number.isFinite(start) || start < 0 || start >= rootBytes.length) return null;
+  const size = Number(itemSize);
+  if (Number.isFinite(size) && size > 0) {
+    const end = start + size;
+    if (end > rootBytes.length) return null;
+    return rootBytes.subarray(start, end);
+  }
+  const slice = rootBytes.subarray(start);
+  const headerLength = ans104HeaderLength(slice);
+  if (!headerLength || headerLength > slice.length) return null;
+  return slice;
+}
+
+async function fetchHeaderReuploadCandidates(txId, debug) {
+  const candidates = [];
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    const result = await tryFetchBytesWithHeaders(urlForTx(base, txId), debug);
+    const headerMeta = result ? headerMetaCandidate(`${base} headers`, result.headers) : null;
+    if (!headerMeta) continue;
+    if (headerMeta.nativeL1) {
+      debug?.push(`headers ${base} -> signature type 0/native L1; cannot rebuild as ANS-104 from headers`);
+      continue;
+    }
+    if (headerMeta.servedDataId && headerMeta.servedDataId !== txId) {
+      debug?.push(`headers ${base} -> served data id ${headerMeta.servedDataId} differs from requested ${txId}`);
+    }
+    if (headerMeta.rootTransactionId) {
+      debug?.push(`headers ${base} -> root transaction id ${headerMeta.rootTransactionId}`);
+    }
+    const built = buildAns104Candidates(headerMeta.meta, result.bytes).map(candidate => ({
+      ...candidate,
+      label: `${headerMeta.source} ${candidate.label}`,
+    }));
+    debug?.push(`headers ${base} -> reconstructed ${built.length} candidate${built.length === 1 ? '' : 's'} from response headers`);
+    candidates.push(...built);
+  }
+  return candidates;
+}
+
+async function fetchRootOffsetCandidates(txId, debug) {
+  const candidates = [];
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    const result = await tryFetchBytesWithHeaders(urlForTx(base, txId), debug);
+    if (!result) continue;
+    const rootId = result.headers.get('x-ar-io-root-transaction-id');
+    const itemOffset = result.headers.get('x-ar-io-root-data-item-offset');
+    const itemSize = result.headers.get('x-ar-io-root-item-size') || result.headers.get('x-ar-io-data-item-size');
+    if (!rootId || !itemOffset) continue;
+    debug?.push(`root-offset ${base} -> root ${rootId}, item offset ${itemOffset}${itemSize ? `, item size ${itemSize}` : ''}`);
+
+    for (const rootBase of REUPLOAD_SOURCE_BASES) {
+      const rootBytes = await tryFetchBytes(`${urlForTx(rootBase, rootId)}?require-codec=ans104@1.0`, debug);
+      if (!rootBytes) continue;
+      const itemBytes = extractAns104AtOffset(rootBytes, itemOffset, itemSize);
+      if (!itemBytes) {
+        debug?.push(`root-offset ${rootBase} -> could not parse ANS-104 item at offset ${itemOffset}`);
+        continue;
+      }
+      const sizeLabel = itemSize ? ` size ${itemSize}` : '';
+      const candidate = candidateFromAns104Bytes(`${rootBase} root ${shortTx(rootId)} offset ${itemOffset}${sizeLabel}`, itemBytes);
+      debug?.push(`root-offset ${rootBase} -> ${candidate ? 'candidate extracted' : 'not a recognized ANS-104 item'}`);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+async function fetchGoldskyMetaCandidates(txId, debug) {
+  const out = [];
+  for (const url of GOLDSKY_URLS) {
+    for (const { label, query } of [
+      { label: 'transaction', query: GOLDSKY_TX_QUERY },
+      { label: 'transactions', query: GOLDSKY_TXS_QUERY },
+    ]) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables: { id: txId } }),
+        });
+        debug?.push(`metadata ${url} ${label} -> HTTP ${res.status}`);
+        if (!res.ok) continue;
+        const json = await res.json();
+        if (json?.errors?.length) {
+          debug?.push(`metadata ${url} ${label} -> GraphQL errors: ${json.errors.map(e => e.message).join(' | ')}`);
+        }
+        const tx = json?.data?.transaction || json?.data?.transactions?.edges?.[0]?.node;
+        const candidates = metaCandidates(`${url} ${label}`, tx);
+        debug?.push(`metadata ${url} ${label} -> ${candidates.length} candidate metadata shape${candidates.length === 1 ? '' : 's'}`);
+        out.push(...candidates);
+      } catch (err) {
+        debug?.push(`metadata ${url} ${label} -> error: ${err.message}`);
+      }
+    }
+  }
+  return out;
+}
+
+async function fetchGatewayMetaCandidates(txId, debug) {
+  const out = [];
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    if (base.includes('{txid}')) continue;
+    for (const url of [`${base.replace(/\/+$/, '')}/tx/${txId}`, `${base.replace(/\/+$/, '')}/raw/${txId}`]) {
+      const json = await tryFetchJson(url, debug);
+      if (json) {
+        const candidates = metaCandidates(url, json);
+        debug?.push(`metadata ${url} -> ${candidates.length} candidate metadata shape${candidates.length === 1 ? '' : 's'}`);
+        out.push(...candidates);
+      }
+    }
+  }
+  out.push(...await fetchGoldskyMetaCandidates(txId, debug));
+  return out;
+}
+
+async function fetchPayloadBytes(txId, expectedSize, debug) {
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    const bytes = await tryFetchBytes(urlForTx(base, txId), debug);
+    if (!bytes) continue;
+    if (expectedSize > 0 && bytes.length !== expectedSize) {
+      try {
+        const text = new TextDecoder().decode(bytes).trim();
+        const decoded = b64urlToBytes(text);
+        if (decoded.length === expectedSize) {
+          debug?.push(`payload ${base} -> decoded base64url to ${decoded.length} bytes`);
+          return decoded;
+        }
+      } catch (_) {
+        debug?.push(`payload ${base} -> size ${bytes.length} did not match expected ${expectedSize}; base64url decode did not match`);
+      }
+    }
+    return bytes;
+  }
+  return null;
+}
+
+async function probePayloadOnlySources(txId, debug) {
+  debug?.push('payload-only probe -> starting because no usable metadata was found');
+  let found = 0;
+  for (const base of REUPLOAD_SOURCE_BASES) {
+    const result = await tryFetchBytesWithHeaders(urlForTx(base, txId), debug);
+    if (result?.bytes) {
+      found++;
+      debug?.push(`payload-only ${base} -> data is available, but cannot reconstruct signed ANS-104 without signature, owner, tags, target, and anchor metadata`);
+    }
+  }
+  debug?.push(`payload-only probe -> ${found} source${found === 1 ? '' : 's'} returned bytes`);
+}
+
+async function buildReuploadCandidates(txId, debug) {
+  const candidates = await fetchAns104Candidates([
+    ...REUPLOAD_SOURCE_BASES.map(base => ({ label: `${base} ANS-104`, url: urlForTx(base, txId) })),
+    { label: 'arweave.net raw ANS-104', url: `https://arweave.net/raw/${txId}` },
+  ], debug);
+  candidates.push(...await fetchHeaderReuploadCandidates(txId, debug));
+  candidates.push(...await fetchRootOffsetCandidates(txId, debug));
+
+  const metas = await fetchGatewayMetaCandidates(txId, debug);
+  debug?.push(`metadata total -> ${metas.length}`);
+  candidates.push(...await fetchBundledInCandidates(txId, metas, debug));
+
+  if (metas.length === 0) {
+    await probePayloadOnlySources(txId, debug);
+  }
+  for (const { source, meta } of metas) {
+    const dataBytes = await fetchPayloadBytes(txId, meta.dataSize || 0, debug);
+    if (dataBytes) {
+      const built = buildAns104Candidates(meta, dataBytes).map(candidate => ({
+        ...candidate,
+        label: `${source} ${candidate.label}`,
+      }));
+      debug?.push(`reconstruct ${source} -> ${built.length} candidate${built.length === 1 ? '' : 's'}`);
+      candidates.push(...built);
+    } else {
+      debug?.push(`reconstruct ${source} -> no payload bytes`);
+    }
+  }
+
+  debug?.push(`candidate total -> ${candidates.length}`);
+  return candidates;
+}
+
+async function fetchNativeTxHeaders(txId, debug) {
+  const url = `https://arweave.net/tx/${txId}`;
+  const json = await tryFetchJson(url, debug);
+  if (!json?.id || !json?.data_root) return null;
+  return json;
+}
+
+function nativeChunkIndexForByte(uploader, byteOffset) {
+  return uploader.transaction.chunks.chunks.findIndex(chunk =>
+    byteOffset >= chunk.minByteRange && byteOffset < chunk.maxByteRange
+  );
+}
+
+async function verifyAndRepairNativeChunks(arweave, uploader, txId, dataBytes, setStatus, debug) {
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      const downloaded = new Uint8Array(await arweave.chunks.downloadChunkedData(txId));
+      debug.push(`native readback -> ${downloaded.length} bytes`);
+      if (downloaded.length !== dataBytes.length) return false;
+      for (let i = 0; i < downloaded.length; i++) {
+        if (downloaded[i] !== dataBytes[i]) {
+          debug.push(`native readback -> byte mismatch at ${i}`);
+          return false;
+        }
+      }
+      return true;
+    } catch (err) {
+      const message = err?.message || String(err);
+      debug.push(`native readback attempt ${attempt}/6 -> ${message}`);
+      const match = message.match(/at (\d+)\/(\d+)/);
+      if (!match) return false;
+      const byteOffset = Number(match[1]);
+      const chunkIndex = nativeChunkIndexForByte(uploader, byteOffset);
+      if (chunkIndex < 0) return false;
+      setStatus('', `Repairing native chunk ${chunkIndex}...`);
+      await uploader.uploadChunk(chunkIndex);
+    }
+  }
+  return false;
+}
+
+async function verifyGatewayAvailability(txId, debug) {
+  for (const url of [`https://arweave.net/${txId}`]) {
+    try {
+      const res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+      await res.body?.cancel?.();
+      debug.push(`gateway verify ${url} -> HTTP ${res.status}`);
+      if (res.ok) return true;
+    } catch (err) {
+      debug.push(`gateway verify ${url} -> ${err.message}`);
+    }
+  }
+  return false;
+}
+
+async function callCopycatEndpoints(txId, blockHeight, debug, setStatus) {
+  if (!blockHeight) {
+    debug.push('copycat -> skipped: no block height available');
+    return false;
+  }
+
+  let allOk = true;
+  for (let i = 0; i < COPYCAT_ENDPOINTS.length; i++) {
+    const endpoint = COPYCAT_ENDPOINTS[i];
+    const url = `${endpoint}?from+integer=${blockHeight}&to+integer=${blockHeight}`;
+    setStatus?.('', `Re-indexing via copycat ${i + 1}/${COPYCAT_ENDPOINTS.length}...`);
+    try {
+      const res = await fetch(url);
+      const text = await res.text().catch(() => '');
+      debug.push(`copycat ${shortTx(txId)} ${blockHeight} ${endpoint} -> HTTP ${res.status}${text ? ` ${previewText(text)}` : ''}`);
+      if (!res.ok) allOk = false;
+    } catch (err) {
+      debug.push(`copycat ${endpoint} -> ${err.message}`);
+      allOk = false;
+    }
+  }
+  return allOk;
+}
+
+async function nativeReuploadTx(txId, state, setStatus, debug) {
+  const txHeaders = await fetchNativeTxHeaders(txId, debug);
+  if (!txHeaders) throw new Error('Native L1 metadata was not available from arweave.net/tx.');
+  if (Number(txHeaders.format || 1) !== 2 || !txHeaders.data_root) {
+    throw new Error('Native L1 tx is not a chunked format-2 data tx.');
+  }
+
+  const expectedSize = Number.parseInt(txHeaders.data_size || txHeaders.data?.size || state._level?.dataSize || '0', 10);
+  if (!Number.isFinite(expectedSize) || expectedSize <= 0) throw new Error('Native L1 tx has no usable data_size.');
+
+  const dataBytes = await fetchPayloadBytes(txId, expectedSize, debug);
+  if (!dataBytes) throw new Error('Native payload bytes were not available from AR.IO/Turbo.');
+  if (dataBytes.length !== expectedSize) {
+    throw new Error(`Native payload size mismatch: expected ${expectedSize}, got ${dataBytes.length}.`);
+  }
+
+  const arweave = arweaveFromUrl(NATIVE_UPLOAD_URL);
+  const tx = arweave.transactions.fromRaw({ ...txHeaders, data: new Uint8Array(0) });
+  const uploader = await arweave.transactions.getUploader(tx, dataBytes);
+  debug.push(`native tx+chunk -> ${uploader.totalChunks} chunks, data_root ${txHeaders.data_root}`);
+
+  let activeUploader = uploader;
+  while (!activeUploader.isComplete) {
+    try {
+      await activeUploader.uploadChunk();
+    } catch (err) {
+      const message = err?.message || String(err);
+      if (activeUploader.chunkIndex === 0 && /Unable to upload transaction:/.test(message)) {
+        debug.push(`native tx header post rejected -> ${message}; falling back to chunk-only`);
+        activeUploader = await arweave.transactions.getUploader({
+          txPosted: true,
+          chunkIndex: 0,
+          lastResponseError: '',
+          lastRequestTimeEnd: 0,
+          lastResponseStatus: 0,
+          transaction: { ...txHeaders, data: new Uint8Array(0) },
+        }, dataBytes);
+        continue;
+      }
+      throw err;
+    }
+    setStatus('', `Native chunks ${activeUploader.chunkIndex}/${activeUploader.totalChunks} (${activeUploader.pctComplete}%)...`);
+  }
+
+  setStatus('', 'Verifying native chunk readback...');
+  const chunksOk = await verifyAndRepairNativeChunks(arweave, activeUploader, txId, dataBytes, setStatus, debug);
+  if (!chunksOk) throw new Error('Native chunks uploaded, but chunk readback could not be verified.');
+
+  setStatus('', 'Native chunks verified. Re-indexing via copycat...');
+  const copycatOk = await callCopycatEndpoints(txId, state._level?.blockHeight || txHeaders.block?.height, debug, setStatus);
+  const gatewayOk = await verifyGatewayAvailability(txId, debug);
+
+  state._nativeChunksDone = true;
+  state._copycatDone = copycatOk;
+  return { chunksOk, copycatOk, gatewayOk };
+}
+
+const GOLDSKY_TX_QUERY = `
+  query GetTxMeta($id: ID!) {
+    transaction(id: $id) {
+      id
+      signature
+      anchor
+      recipient
+      owner { key }
+      bundledIn { id }
+      tags { name value }
+      data { size }
+    }
+  }
+`;
+
+const GOLDSKY_TXS_QUERY = `
+  query GetTxMetaFromConnection($id: ID!) {
+    transactions(ids: [$id], first: 1) {
+      edges {
+        node {
+          id
+          signature
+          anchor
+          recipient
+          owner { key }
+          bundledIn { id }
+          tags { name value }
+          data { size }
+        }
+      }
+    }
+  }
+`;
+
+async function reuploadTx(txId) {
+  const state = allStates[txId];
+  if (!state) return;
+
+  const raw  = state['arweave-raw'];
+  const cdn  = state['arweave-main'];
+
+  const btnEl    = document.getElementById(`reupload-btn-${txId}`);
+  const statusEl = document.getElementById(`reupload-status-${txId}`);
+
+  const setStatus = (cls, html) => {
+    if (statusEl) { statusEl.className = `reupload-status ${cls}`; statusEl.innerHTML = html; }
+    if (cls === 'status-fail') state._lastReuploadError = htmlToPlainText(html);
+    if (cls === 'status-ok') state._lastReuploadError = '';
+  };
+
+  activeReuploads.add(txId);
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Uploading…'; }
+  setStatus('', '');
+
+  try {
+    let uploadCandidates;
+    const debug = [];
+
+    if (state._level?.level === 'L1') {
+      const result = await nativeReuploadTx(txId, state, setStatus, debug);
+      if (result.copycatOk) {
+        state._reuploadDone = !!result.gatewayOk;
+        state._gatewayAvailable = !!result.gatewayOk;
+        state._gatewayPending = !result.gatewayOk;
+        if (!result.gatewayOk) {
+          setTimeout(() => {
+            setStatus('status-warn', `Native chunks were reseeded, but arweave.net is not serving this TX yet. This is pending, not a completed recovery.${debugHtml(debug)}`);
+          }, 0);
+        }
+        setStatus('status-ok',
+          `✓ Native chunks verified and copycat re-index completed.` +
+          `${result.gatewayOk ? '<br>arweave.net is serving now.' : '<br>Gateway serving may lag briefly.'}` +
+          debugHtml(debug)
+        );
+      } else {
+        setStatus('status-warn', `⚠ Native chunks verified, but one or more copycat endpoints failed.${debugHtml(debug)}`);
+      }
+      return;
+
+    } else if (cdn?.ok) {
+      const res = await fetch(`https://arweave.net/${txId}?require-codec=ans104@1.0`);
+      debug.push(`cdn codec -> HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`CDN fetch failed: HTTP ${res.status}`);
+      const buf = await res.arrayBuffer();
+      debug.push(`cdn codec -> ${buf.byteLength} bytes`);
+      uploadCandidates = [{ label: 'CDN ANS-104', body: new Uint8Array(buf) }];
+
+    } else if (raw?.ok || hasUsableSourceGateway(state)) {
+      uploadCandidates = await buildReuploadCandidates(txId, debug);
+    } else {
+      setStatus('status-fail', `x No suitable source available for re-upload.${debugHtml(debug)}`);
+      return;
+    }
+
+    if (!uploadCandidates || uploadCandidates.length === 0) {
+      setStatus(
+        'status-fail',
+        `Payload bytes were found, but no signed ANS-104 item or reconstructable metadata was available. ` +
+        `Payload bytes alone cannot preserve this TXID.${debugHtml(debug)}`
+      );
+      return;
+    }
+
+    const uploadUrl = document.getElementById('uploadUrlInput')?.value.trim() || 'https://up.arweave.net/tx';
+    const result = await uploadFirstValidCandidate(uploadUrl, uploadCandidates, txId, setStatus, debug);
+    if (!result) return;
+    const newId = result.id;
+
+    if (newId === txId) {
+      const gatewayOk = await verifyGatewayAvailability(txId, debug);
+      state._gatewayAvailable = gatewayOk;
+      state._gatewayPending = !gatewayOk;
+      state._reuploadDone = gatewayOk;
+      state._uploadAccepted = !gatewayOk;
+      if (!gatewayOk) {
+        setTimeout(() => {
+          setStatus('status-warn', `Upload endpoint accepted this TX, but arweave.net is not serving it yet. This is pending, not a completed recovery.${debugHtml(debug)}`);
+        }, 0);
+      }
+      if (gatewayOk) {
+        setStatus('status-ok', `✓ Successfully re-uploaded and available on arweave.net.${debugHtml(debug)}`);
+      } else {
+        setStatus('status-warn', `✓ Successfully re-uploaded, but arweave.net is not serving it yet.${debugHtml(debug)}`);
+      }
+    } else {
+      setStatus('status-warn',
+        `⚠ Uploaded with a different TX ID — this wasn't the intended behaviour.<br>` +
+        `<span style="font-size:0.65rem">Previous: <code>${txId}</code><br>New: <code>${newId}</code></span>`
+      );
+    }
+  } catch (err) {
+    setStatus('status-fail', `✗ ${err.message}`);
+  } finally {
+    activeReuploads.delete(txId);
+    if (btnEl) {
+      btnEl.disabled = !!state._reuploadDone;
+      btnEl.textContent = state._reuploadDone
+        ? 'Re-uploaded'
+        : state._level?.level === 'L1'
+          ? 'Reseed L1 chunks'
+          : (state['arweave-raw']?.ok || hasUsableSourceGateway(state)) && !state['arweave-main']?.ok
+            ? 'Try re-upload from source'
+            : 'Re-upload';
+    }
+    updateBulkReuploadButton();
+  }
+}
+
+async function uploadFirstValidCandidate(uploadUrl, uploadCandidates, expectedTxId, setStatus, debug = []) {
+  let lastInvalidSig = false;
+  let lastError = '';
+  const checkedCandidates = [];
+
+  for (const candidate of uploadCandidates) {
+    const signatureLength = SIGNATURE_TYPE_LENGTHS[candidate.signatureType]?.sig ?? 512;
+    const signature = candidate.signature || candidate.body.subarray(2, 2 + signatureLength);
+    const id = await sha256B64url(signature);
+    debug.push(`candidate ${candidate.label} -> id ${id}, bytes ${candidate.body.length}`);
+    checkedCandidates.push({ ...candidate, id });
+  }
+
+  const matchingCandidates = checkedCandidates.filter(candidate => candidate.id === expectedTxId);
+  if (matchingCandidates.length === 0) {
+    const seen = [...new Set(checkedCandidates.map(candidate => shortTx(candidate.id)))].join(', ');
+    setStatus('status-fail', `x Reconstructed item ID does not match ${shortTx(expectedTxId)}. Candidate ID${checkedCandidates.length === 1 ? '' : 's'}: ${seen || 'none'}.${debugHtml(debug)}`);
+    return null;
+  }
+
+  for (let i = 0; i < matchingCandidates.length; i++) {
+    const candidate = matchingCandidates[i];
+    if (matchingCandidates.length > 1) {
+      setStatus('', `Trying ${candidate.label} encoding (${i + 1}/${matchingCandidates.length})...`);
+    }
+
+    let uploadRes;
+    try {
+      uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: candidate.body,
+      });
+    } catch (err) {
+      const message = err?.message || String(err);
+      debug.push(`upload ${candidate.label} -> fetch error: ${message}`);
+      lastError = `Fetch failed while POSTing to ${uploadUrl}. The browser may be hiding an HTTP 500 response because of CORS; run the CLI for the server body.`;
+      continue;
+    }
+
+    if (uploadRes.ok) return uploadRes.json();
+
+    const errBody = await uploadRes.text().catch(() => '');
+    lastInvalidSig = errBody.includes('invalid_ans104_signature');
+    lastError = `HTTP ${uploadRes.status}${errBody ? ' - ' + errBody.slice(0, 120) : ''}`;
+    debug.push(`upload ${candidate.label} -> ${lastError}`);
+    if (!lastInvalidSig) throw new Error(`Upload failed: ${lastError}`);
+  }
+
+  if (lastInvalidSig) {
+    setStatus('status-fail', `x Upload rejected: invalid ANS-104 signature for every matching signature type. The gateway data/metadata may not match the original signed item.${debugHtml(debug)}`);
+    return null;
+  }
+
+  setStatus('status-fail', `x Upload failed: ${escapeHtml(lastError || 'unknown error')}.${debugHtml(debug)}`);
+  return null;
+}
+
+function getReuploadBlocker(txId, state) {
+  const raw  = state['arweave-raw'];
+  const cdn  = state['arweave-main'];
+  const hasSource = !!(raw?.ok || cdn?.ok || hasUsableSourceGateway(state));
+
+  if (state._reuploadDone) return 'Already re-uploaded in this session.';
+  if (raw?.ok && cdn?.ok) return 'Already available on arweave.net.';
+  if (hasSource) return null;
+
+  const allGwDone = GATEWAYS.filter(gw => !gw.meta).every(gw => state[gw.id] !== undefined);
+  if (!allGwDone) return 'Availability checks are still running.';
+  if (hasCorsBlockedSourceGateway(state)) return 'Source exists, but the browser is CORS-blocked. Use the CLI reupload script for this TX.';
+  if (!hasSource) return 'No suitable source is available for re-upload.';
+
+  return null;
+}
+
+function getReuploadableTxIds() {
+  return Object.entries(allStates)
+    .filter(([txId, state]) => !activeReuploads.has(txId) && !getReuploadBlocker(txId, state))
+    .map(([txId]) => txId);
+}
+
+function getSuccessfulAvailableTxIds() {
+  return Object.entries(allStates)
+    .filter(([, state]) => isFullyAvailable(state))
+    .map(([txId]) => txId);
+}
+
+function getSuccessfulAvailableRows() {
+  return Object.entries(allStates)
+    .filter(([, state]) => isFullyAvailable(state))
+    .map(([txId, state]) => `${txId}\t${state._level?.blockHeight ?? ''}`);
+}
+
+function getSuccessfulPendingTxIds() {
+  return Object.entries(allStates)
+    .filter(([txId, state]) => {
+      if (isFullyAvailable(state) || isSuccessfulAction(state) || activeReuploads.has(txId)) return false;
+      return !getReuploadBlocker(txId, state);
+    })
+    .map(([txId]) => txId);
+}
+
+function getIncompleteTxIds() {
+  return Object.entries(allStates)
+    .filter(([, state]) => isChecksComplete(state) && !isFullyAvailable(state) && !isSuccessfulAction(state))
+    .map(([txId]) => txId);
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function htmlToPlainText(html) {
+  const el = document.createElement('div');
+  el.innerHTML = html || '';
+  return el.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function availabilityCheckStatus(label, result) {
+  if (result === undefined) return `${label} pending`;
+  if (result.ok) return `${label} ${result.status ? `HTTP ${result.status}` : result.label || 'OK'}`;
+  if (result.corsLikely) return `${label} CORS`;
+  if (result.status) return `${label} HTTP ${result.status}`;
+  return `${label} ${result.label || result.error || 'error'}`;
+}
+
+function availabilityCheckError(result) {
+  if (!result || result.ok) return '';
+  if (result.corsLikely) return 'CORS/fetch blocked';
+  if (result.error) return result.error;
+  if (result.status) return `HTTP ${result.status}`;
+  return result.label || 'error';
+}
+
+function getIncompleteRows() {
+  const rows = [[
+    'txid',
+    'block_height',
+    ...GATEWAYS.map(gw => gw.id.replace(/-/g, '_')),
+    'passed_checks',
+    'failed_checks',
+    'error',
+  ].join(',')];
+
+  for (const [txId, state] of Object.entries(allStates)) {
+    if (!isChecksComplete(state) || isFullyAvailable(state) || isSuccessfulAction(state)) continue;
+
+    const checks = GATEWAYS.map((gw) => ({ gateway: gw, result: state[gw.id] }));
+    const passed = checks
+      .filter(({ result }) => result?.ok)
+      .map(({ gateway }) => gateway.label);
+    const failed = checks
+      .filter(({ result }) => result !== undefined && !result?.ok)
+      .map(({ gateway, result }) => `${gateway.label}: ${availabilityCheckError(result) || 'failed'}`);
+    const errors = [
+      state._lastReuploadError,
+      state._uploadDisabled,
+      state._level?.error,
+      getReuploadBlocker(txId, state),
+    ].filter(Boolean);
+
+    rows.push([
+      txId,
+      state._level?.blockHeight ?? '',
+      ...GATEWAYS.map(gw => availabilityCheckStatus(gw.label, state[gw.id])),
+      passed.join('; '),
+      failed.join('; '),
+      [...new Set(errors)].join('; '),
+    ].map(csvCell).join(','));
+  }
+
+  return rows;
+}
+
+function isFullyAvailable(state) {
+  return !!(state._gatewayAvailable || (state['arweave-raw']?.ok && state['arweave-main']?.ok));
+}
+
+function isSuccessfulAction(state) {
+  return !!(state._reuploadDone || state._gatewayAvailable);
+}
+
+function isChecksComplete(state) {
+  return GATEWAYS.filter(gw => !gw.meta).every(gw => state[gw.id] !== undefined);
+}
+
+function downloadTextFile(filename, lines, type = 'text/plain') {
+  const blob = new Blob([`${lines.join('\n')}${lines.length ? '\n' : ''}`], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadTxList(filename, txIds) {
+  downloadTextFile(filename, txIds);
+}
+
+function downloadSuccessfulAvailable() {
+  downloadTextFile('successful-available.csv', getSuccessfulAvailableRows(), 'text/csv');
+}
+
+function downloadSuccessfulPending() {
+  downloadTxList('pending-reseed.txt', getSuccessfulPendingTxIds());
+}
+
+function downloadIncomplete() {
+  downloadTextFile('incomplete.csv', getIncompleteRows(), 'text/csv');
+}
+
+function updateBulkReuploadButton() {
+  const btn = document.getElementById('reuploadAllBtn');
+  const status = document.getElementById('reuploadAllStatus');
+  const availableBtn = document.getElementById('downloadAvailableBtn');
+  const pendingBtn = document.getElementById('downloadPendingBtn');
+  const incompleteBtn = document.getElementById('downloadIncompleteBtn');
+  if (!btn || !status) return;
+
+  const count = getReuploadableTxIds().length;
+  const availableCount = getSuccessfulAvailableTxIds().length;
+  const pendingCount = getSuccessfulPendingTxIds().length;
+  const incompleteCount = getIncompleteTxIds().length;
+  btn.disabled = bulkReuploading || count === 0;
+  if (availableBtn) {
+    availableBtn.disabled = availableCount === 0;
+    availableBtn.textContent = `Download available (${availableCount})`;
+  }
+  if (pendingBtn) {
+    pendingBtn.disabled = pendingCount === 0;
+    pendingBtn.textContent = `Download pending (${pendingCount})`;
+  }
+  if (incompleteBtn) {
+    incompleteBtn.disabled = incompleteCount === 0;
+    incompleteBtn.textContent = `Download incomplete (${incompleteCount})`;
+  }
+  btn.textContent = bulkReuploading
+    ? 'Re-uploading...'
+    : count > 0
+      ? `Re-upload all available (${count})`
+      : 'Re-upload all available';
+
+  if (!bulkReuploading) {
+    status.textContent = count > 0
+      ? `${count} transaction${count === 1 ? '' : 's'} ready to re-upload.`
+      : 'No transactions are ready for re-upload yet.';
+  }
+}
+
+async function reuploadAllAvailable() {
+  const txIds = getReuploadableTxIds();
+  const status = document.getElementById('reuploadAllStatus');
+  if (txIds.length === 0) {
+    updateBulkReuploadButton();
+    return;
+  }
+
+  bulkReuploading = true;
+  updateBulkReuploadButton();
+
+  for (let i = 0; i < txIds.length; i++) {
+    if (status) status.textContent = `Re-uploading ${i + 1} of ${txIds.length}: ${shortTx(txIds[i])}`;
+    await reuploadTx(txIds[i]);
+  }
+
+  bulkReuploading = false;
+  updateBulkReuploadButton();
+  if (status) status.textContent = `Bulk re-upload finished for ${txIds.length} transaction${txIds.length === 1 ? '' : 's'}.`;
+}
+
+function actionsCellHtml(txId, state) {
+  const blocker = getReuploadBlocker(txId, state);
+
+  if (blocker) {
+    return `<div id="reupload-status-${txId}" class="reupload-status status-idle">${escapeHtml(blocker)}</div>`;
+  }
+  const label = state._level?.level === 'L1'
+    ? 'Reseed L1 chunks'
+    : (state['arweave-raw']?.ok || hasUsableSourceGateway(state)) && !state['arweave-main']?.ok
+      ? 'Try re-upload from source'
+      : 'Re-upload';
+  const warnings = [
+    state._level?.level === 'L1' && !state._level?.blockHeight ? 'Block height is missing; copycat re-index may be skipped.' : '',
+    state._uploadDisabled || '',
+  ].filter(Boolean);
+  const warningHtml = warnings.length > 0
+    ? `<div id="reupload-status-${txId}" class="reupload-status status-warn">${escapeHtml([...new Set(warnings)].join(' '))}</div>`
+    : `<div id="reupload-status-${txId}" class="reupload-status"></div>`;
+  return `<button class="reupload-btn" id="reupload-btn-${txId}" onclick="reuploadTx('${txId}')">${label}</button>
+          ${warningHtml}`;
+}
+
+async function findBlockHeight(txId) {
+  const state = allStates[txId];
+  if (!state) return;
+
+  const btn = document.getElementById(`find-block-btn-${txId}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
+
+  const weaveOffset = state['arweave-raw']?.offset ?? state._partition?.offset;
+  if (!weaveOffset) return;
+
+  const guessedHeight = await guessBlockFromOffset(weaveOffset);
+  if (guessedHeight != null) {
+    state._level = { ...state._level, blockHeight: guessedHeight, blockHeightGuessed: true };
+    updateTableRow(txId, state);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+  }
+}
+
+// ─── Global state ─────────────────────────────────────────────────────────────
+
+let allStates = {};
+const activeReuploads = new Set();
+let bulkReuploading = false;
+
+// ─── Main flow ───────────────────────────────────────────────────────────────
+
+async function runChecks() {
+  const input = document.getElementById('txInput');
+  const btn   = document.getElementById('checkBtn');
+
+  const lines = input.value.split('\n').map(l => l.trim()).filter(Boolean);
+  const txIds = [...new Set(lines)];
+
+  if (txIds.length === 0) { input.focus(); return; }
+
+  const invalid = txIds.filter(id => !isValidTxId(id));
+  if (invalid.length > 0) {
+    alert(
+      `Invalid TX ID${invalid.length > 1 ? 's' : ''}:\n${invalid.join('\n')}\n\n` +
+      `Arweave transaction IDs are 43 base64url characters.`
+    );
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  showRateLimitNotice(false);
+
+  document.getElementById('results').classList.remove('hidden');
+
+  // Render skeleton rows
+  document.getElementById('resultsBody').innerHTML = txIds.map(skeletonRow).join('');
+  document.getElementById('statsGrid').innerHTML = '';
+  document.getElementById('levelDist').innerHTML = '';
+  const bulkStatus = document.getElementById('reuploadAllStatus');
+  if (bulkStatus) bulkStatus.textContent = 'Waiting for availability checks...';
+
+  // All TXIDs run in parallel; per-domain concurrency (max 5) is enforced by limiters
+  allStates = {};
+  bulkReuploading = false;
+  updateBulkReuploadButton();
+  const completedIds = [];
+
+  await Promise.allSettled(txIds.map(async (txId) => {
+    const state = {};
+    allStates[txId] = state;
+
+    const levelPromise = resolveBundleLevel(txId).then(info => {
+      state._level = info;
+      updateTableRow(txId, state);
+      return info;
+    });
+
+    const gwPromises = GATEWAYS.map(gw =>
+      (gw.check ? gw.check(txId) : headRequest(gw.url(txId))).then(result => {
+        state[gw.id] = result;
+        updateTableRow(txId, state);
+        return result;
+      })
+    );
+
+    await Promise.allSettled([levelPromise, ...gwPromises]);
+
+    updateTableRow(txId, state);
+    completedIds.push(txId);
+    renderStats(allStates, completedIds);
+
+    // Validate re-upload eligibility (content-type match + manifest JSON check)
+    const uploadDisabledReason = await computeUploadValidation(txId, state);
+    if (uploadDisabledReason) {
+      state._uploadDisabled = uploadDisabledReason;
+      updateTableRow(txId, state);
+    }
+
+    // Low-priority: resolve partition only after all other checks complete
+    const partitionInfo = await resolvePartition(txId, state._level, state);
+    if (partitionInfo) {
+      state._partition = partitionInfo;
+      updateTableRow(txId, state);
+    }
+
+
+    // If raw nodes return 200 but CDN returns 404, do a GET to check for a manifest
+    // with an "index.html" path entry, and run normal checks on that sub-TX.
+    const rawResult = state['arweave-raw'];
+    const cdnResult = state['arweave-main'];
+    if (rawResult?.ok && cdnResult && !cdnResult.ok) {
+      const subTxId = await checkManifestIndexHtml(txId);
+      if (subTxId && !allStates[subTxId]) {
+        const parentRow = document.getElementById(`row-${txId}`);
+        if (parentRow) parentRow.insertAdjacentHTML('afterend', skeletonRow(subTxId, true));
+
+        const subState = {};
+        allStates[subTxId] = subState;
+
+        const subLevelPromise = resolveBundleLevel(subTxId).then(info => {
+          subState._level = info;
+          updateTableRow(subTxId, subState);
+          return info;
+        });
+
+        const subGwPromises = GATEWAYS.map(gw =>
+          (gw.check ? gw.check(subTxId) : headRequest(gw.url(subTxId))).then(result => {
+            subState[gw.id] = result;
+            updateTableRow(subTxId, subState);
+            return result;
+          })
+        );
+
+        await Promise.allSettled([subLevelPromise, ...subGwPromises]);
+        updateTableRow(subTxId, subState);
+        completedIds.push(subTxId);
+        renderStats(allStates, completedIds);
+
+        // Validate re-upload eligibility for sub-row
+        const subUploadDisabledReason = await computeUploadValidation(subTxId, subState);
+        if (subUploadDisabledReason) {
+          subState._uploadDisabled = subUploadDisabledReason;
+          updateTableRow(subTxId, subState);
+        }
+
+        // Low-priority: resolve partition for sub-row
+        const subPartitionInfo = await resolvePartition(subTxId, subState._level, subState);
+        if (subPartitionInfo) {
+          subState._partition = subPartitionInfo;
+          updateTableRow(subTxId, subState);
+        }
+
+      }
+    }
+  }));
+
+  btn.disabled = false;
+  btn.textContent = 'Inspect';
+}
+
+// Ctrl+Enter / Cmd+Enter submits from textarea
+document.getElementById('txInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runChecks();
+});
+
+window.runChecks = runChecks;
+window.findBlockHeight = findBlockHeight;
+window.reuploadTx = reuploadTx;
+window.reuploadAllAvailable = reuploadAllAvailable;
+window.downloadSuccessfulAvailable = downloadSuccessfulAvailable;
+window.downloadSuccessfulPending = downloadSuccessfulPending;
+window.downloadIncomplete = downloadIncomplete;
+
+// Auto-fill from URL hash: index.html#TXID
+(function () {
+  const hash = location.hash.replace('#', '').trim();
+  if (isValidTxId(hash)) {
+    document.getElementById('txInput').value = hash;
+    runChecks();
+  }
+})();
+</script>
+</body>
+</html>
